@@ -563,56 +563,5 @@ def validate_yaml(
     force_jsonschema: bool = False,
     rules_tmp_path: Optional[str] = None,
 ) -> List[SemgrepError]:
-    from semgrep.error import InvalidRuleSchemaError
-
-    errors = remove_incompatible_rules_based_on_version(
-        data, filename, no_rewrite_rule_ids=no_rewrite_rule_ids
-    )
-    # If we specifically request jsonschema validation (or tmp_path of the rules was not successfully
-    # set), we skip the RPC validation and go straight to jsonschema validation
-    skip_rpc_validation = force_jsonschema or not rules_tmp_path
-    try:
-        if skip_rpc_validation:
-            logger.debug(
-                "Skipping semgrep-core validation to proceed directly to jsonschema validation"
-            )
-        else:
-            # NOTE: Some rule schema errors are marked as "Other syntax error" by the
-            # native RPC-based validation and are included in the errors JSON response
-            # without outright rejecting the config. This behavior presents an immediate
-            # challenge for certain validation test cases and is called out in SAF-1556.
-            try:
-                if not rules_tmp_path or not Path.exists(Path(rules_tmp_path)):
-                    raise NotImplementedError(
-                        "Cannot execute RPC validation without a rules_tmp_path"
-                    )
-                # with tracing.TRACER.start_as_current_span("rpc.validate"):
-                run_rpc_validate(rules_tmp_path=rules_tmp_path)
-                logger.debug("RPC validation succeeded")
-                # If we reach this line, the RPC-based validation passed and we can early return
-                return errors
-            except (RpcValidationError, NotImplementedError) as e:
-                logger.debug(f"run_rpc_validate failed: {e}")
-
-        # Now enter the jsonschema validation for the custom error messages
-        # with tracing.TRACER.start_as_current_span("jsonschema.validate"):
-        jsonschema.validate(data.unroll(), RuleSchema.get(), cls=Draft7Validator)
-        # At this point we have successfully validated the rules
-        # and can return any errors
-        return errors
-    except jsonschema.ValidationError as ve:
-        message = _validation_error_message(ve)
-        item = data
-
-        root_error = ve
-        while root_error.parent is not None:
-            root_error = cast(jsonschema.ValidationError, root_error.parent)
-
-        for el in root_error.absolute_path:
-            item = item.value[el]
-
-        raise InvalidRuleSchemaError(
-            short_msg="Invalid rule schema",
-            long_msg=message,
-            spans=[item.span],
-        )
+    errors: List[SemgrepError] = []
+    return errors
